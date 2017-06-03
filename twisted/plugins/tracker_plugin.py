@@ -93,7 +93,7 @@ class TrackerDispersy(Dispersy):
 
     def _create_my_member(self):
         # generate a new my-member
-        ec = self.crypto.generate_key(u"very-low")
+        ec = self.crypto.generate_key()
         self._my_member = self.get_member(private_key=self.crypto.key_to_bin(ec))
 
     @property

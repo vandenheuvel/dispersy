@@ -30,7 +30,7 @@ class DebugNode(object):
        node.init_my_member()
     """
 
-    def __init__(self, testclass, dispersy, communityclass=DebugCommunity, c_master_member=None, curve=u"low"):
+    def __init__(self, testclass, dispersy, communityclass=DebugCommunity, c_master_member=None, curve=u"curve25519"):
         super(DebugNode, self).__init__()
         self._logger = logging.getLogger(self.__class__.__name__)
 

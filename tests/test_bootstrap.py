@@ -363,7 +363,7 @@ class TestBootstrapServers(DispersyTestFunc):
             candidates = [Candidate(("130.161.211.245", 6429), False)]
             communities = [PingCommunity.create_community(self._dispersy, self._my_member, candidates)
                            for _ in xrange(COMMUNITIES)]
-            members = [self._dispersy.get_new_member(u"low") for _ in xrange(MEMBERS)]
+            members = [self._dispersy.get_new_member(u"curve25519") for _ in xrange(MEMBERS)]
 
             for community in communities:
                 for member in members:

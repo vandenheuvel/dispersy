@@ -363,7 +363,7 @@ class TestCandidates(DispersyTestFunc):
 
             def get_member():
                 if not member[0]:
-                    member[0] = self._dispersy.get_new_member(u"very-low")
+                    member[0] = self._dispersy.get_new_member(u"curve25519")
                 return member[0]
 
             if "w" in flags:
@@ -557,7 +557,7 @@ class TestCandidates(DispersyTestFunc):
         now = time()
         got = []
         for candidate in candidates:
-            candidate.associate(self._dispersy.get_new_member(u"very-low"))
+            candidate.associate(self._dispersy.get_new_member(u"curve25519"))
             candidate.stumble(now)
             introduce = community.dispersy_get_introduce_candidate(candidate)
             got.append(introduce.sock_addr if introduce else None)

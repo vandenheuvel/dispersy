@@ -104,29 +104,17 @@ class ECCrypto(DispersyCrypto):
         return _CURVES.keys()
 
     @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def generate_key(self, security_level):
+    def generate_key(self, security_level=u"curve25519"):
         """
         Generate a new Elliptic Curve object with a new public / private key pair.
 
-        Security can be u'low', u'medium', or u'high' depending on how secure you need your Elliptic
-        Curve to be.  Currently these values translate into:
-            - very-low: NID_sect163k1  ~42 byte signatures
-            - low:      NID_sect233k1  ~60 byte signatures
-            - medium:   NID_sect409k1 ~104 byte signatures
-            - high:     NID_sect571r1 ~144 byte signatures
-
-        Besides these predefined curves, all other curves provided by M2Crypto are also available.  For
-        a full list of available curves, see ec_get_curves().
-
-        @param security_level: Level of security {u'very-low', u'low', u'medium', or u'high'}.
+        @param security_level: Level of security, currently only u"curve25519".
         @type security_level: unicode
         """
         assert isinstance(security_level, unicode)
         assert security_level in _CURVES
 
         curve = _CURVES[security_level]
-        if curve[1] == "M2Crypto":
-            return M2CryptoSK(curve[0])
 
         if curve[1] == "libnacl":
             return LibNaCLSK()

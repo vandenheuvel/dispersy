@@ -3,32 +3,24 @@
 """
 Create one or more Elliptic Curves.
 
-Typically the following curves are used:
-- very-low: NID_sect163k1  ~42 byte signatures
-- low:      NID_sect233k1  ~60 byte signatures
-- medium:   NID_sect409k1 ~104 byte signatures
-- high:     NID_sect571r1 ~144 byte signatures
+Typically the Curve25519 is used.
 """
 
 import argparse
 import time
 from hashlib import sha1
 
-from M2Crypto import EC
 # From: http://docs.python.org/2/tutorial/modules.html#intra-package-references
 # Note that both explicit and implicit relative imports are based on the name of the current
 # module. Since the name of the main module is always "__main__", modules intended for use as the
 # main module of a Python application should always use absolute imports.
 from dispersy.crypto import ECCrypto, _CURVES
 
+
 def ec_name(eccrypto, curve):
     assert isinstance(curve, unicode)
     curve_id = _CURVES[curve]
 
-    for name in dir(EC):
-        value = getattr(EC, name)
-        if isinstance(value, int) and value == curve_id:
-            return name
 
 def create_key(eccrypto, curves):
     for index, curve in enumerate(curves):
