@@ -1,9 +1,6 @@
 from hashlib import sha1
-from math import ceil
 from struct import Struct
 import logging
-
-from M2Crypto import EC, BIO
 
 # Add libnacl submodule to the python path
 import sys
@@ -17,18 +14,9 @@ from libnacl.encode import hex_encode
 
 _STRUCT_L = Struct(">L")
 
-# Allow all available curves.
-# Niels: 16-12-2013, if it starts with NID_
-_CURVES = dict((unicode(curve), (getattr(EC, curve), "M2Crypto")) for curve in dir(EC) if curve.startswith("NID_"))
-
-# We want to provide a few default curves.  We will change these curves as new become available and
-# old ones to small to provide sufficient security.
-_CURVES.update({u"very-low": (EC.NID_sect163k1, "M2Crypto"),
-                u"low": (EC.NID_sect233k1, "M2Crypto"),
-                u"medium": (EC.NID_sect409k1, "M2Crypto"),
-                u"high": (EC.NID_sect571r1, "M2Crypto")})
 
 # Add custom curves, not provided by M2Crypto
+_CURVES = dict()
 _CURVES.update({u'curve25519': (None, "libnacl")})
 
 logger = logging.getLogger(__name__)
@@ -246,131 +234,6 @@ class DispersyKey(object):
         if self.has_secret_key():
             return sha1(self.pub().key_to_bin()).digest()
         return sha1(self.key_to_bin()).digest()
-
-
-class M2CryptoPK(DispersyKey):
-
-    def __init__(self, ec_pub=None, keystring=None):
-        if ec_pub:
-            self.ec = ec_pub
-        elif keystring:
-            self.ec = self.key_from_pem("-----BEGIN PUBLIC KEY-----\n%s-----END PUBLIC KEY-----\n" % keystring.encode("BASE64"))
-
-    def pub(self):
-        return self
-
-    def has_secret_key(self):
-        return False
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def pem_to_bin(self, pem):
-        """
-        Convert a key in the PEM format into a key in the binary format.
-        @note: Enrcypted pem's are NOT supported and will silently fail.
-        """
-        return "".join(pem.split("\n")[1:-2]).decode("BASE64")
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def key_to_pem(self):
-        "Convert a key to the PEM format."
-        bio = BIO.MemoryBuffer()
-        self.ec.save_pub_key_bio(bio)
-        return bio.read_all()
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def key_from_pem(self, pem):
-        "Get the EC from a public PEM."
-        return EC.load_pub_key_bio(BIO.MemoryBuffer(pem))
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def key_to_bin(self):
-        return self.pem_to_bin(self.key_to_pem())
-
-    def get_signature_length(self):
-        return int(ceil(len(self.ec) / 8.0)) * 2
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def verify(self, signature, data):
-        length = len(signature) / 2
-        r = signature[:length]
-        # remove all "\x00" prefixes
-        while r and r[0] == "\x00":
-            r = r[1:]
-        # prepend "\x00" when the most significant bit is set
-        if ord(r[0]) & 128:
-            r = "\x00" + r
-
-        s = signature[length:]
-        # remove all "\x00" prefixes
-        while s and s[0] == "\x00":
-            s = s[1:]
-        # prepend "\x00" when the most significant bit is set
-        if ord(s[0]) & 128:
-            s = "\x00" + s
-
-        mpi_r = _STRUCT_L.pack(len(r)) + r
-        mpi_s = _STRUCT_L.pack(len(s)) + s
-
-        # mpi_r3 = bn_to_mpi(bin_to_bn(signature[:length]))
-        # mpi_s3 = bn_to_mpi(bin_to_bn(signature[length:]))
-
-        # if not mpi_r == mpi_r3:
-        #     raise RuntimeError([mpi_r.encode("HEX"), mpi_r3.encode("HEX")])
-        # if not mpi_s == mpi_s3:
-        #     raise RuntimeError([mpi_s.encode("HEX"), mpi_s3.encode("HEX")])
-
-        digest = sha1(data).digest()
-        return bool(self.ec.verify_dsa(digest, mpi_r, mpi_s))
-
-
-class M2CryptoSK(M2CryptoPK):
-
-    def __init__(self, curve=None, keystring=None, filename=None):
-        if curve:
-            self.ec = EC.gen_params(curve)
-            self.ec.gen_key()
-
-        elif keystring:
-            self.ec = self.key_from_pem("-----BEGIN EC PRIVATE KEY-----\n%s-----END EC PRIVATE KEY-----\n" % keystring.encode("BASE64"))
-
-        elif filename:
-            # this workaround is needed to run Tribler on Windows 64 bit
-            membuf = BIO.MemoryBuffer(open(filename, 'rb').read())
-            self.ec = EC.load_key_bio(membuf)
-            membuf.close()
-
-    def pub(self):
-        return M2CryptoPK(ec_pub=self.ec.pub())
-
-    def has_secret_key(self):
-        return True
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def key_to_pem(self):
-        "Convert a key to the PEM format."
-        bio = BIO.MemoryBuffer()
-        self.ec.save_key_bio(bio, None, lambda *args: "")
-        return bio.read_all()
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def key_from_pem(self, pem):
-        "Get the EC from a public/private keypair stored in the PEM."
-        def get_password(*args):
-            return ""
-        return EC.load_key_bio(BIO.MemoryBuffer(pem), get_password)
-
-    @attach_runtime_statistics(u"{0.__class__.__name__}.{function_name}")
-    def signature(self, msg):
-        length = int(ceil(len(self.ec) / 8.0))
-        digest = sha1(msg).digest()
-
-        mpi_r, mpi_s = self.ec.sign_dsa(digest)
-        length_r, = _STRUCT_L.unpack_from(mpi_r)
-        r = mpi_r[-min(length, length_r):]
-        length_s, = _STRUCT_L.unpack_from(mpi_s)
-        s = mpi_s[-min(length, length_s):]
-
-        return "".join(("\x00" * (length - len(r)), r, "\x00" * (length - len(s)), s))
 
 
 class LibNaCLPK(DispersyKey):
