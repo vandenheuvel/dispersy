@@ -1,78 +1,83 @@
 from unittest import TestCase
 
-from ..crypto import ECCrypto
+from ..crypto import DispersyPrivateKey, DEFAULT_SECURITY_LEVELS, DispersyPublicKey
 
 
-class TestLowLevelCrypto(TestCase):
+class TestDispersyKey(TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        super(TestLowLevelCrypto, cls).setUpClass()
-        cls.crypto = ECCrypto()
+    def setUp(self):
+        self.data = "".join(chr(i % 256) for i in range(1024))
 
     def test_sign_and_verify(self):
         """
-        Creates each curve, signs some data, and finally verifies the signature.
+        Creates a curve for each security_level, signs some data, and finally verifies the signature.
         """
-        data = "".join(chr(i % 256) for i in xrange(1024))
-        for curve in self.crypto.security_levels:
-            ec = self.crypto.generate_key(curve)
-            signature = self.crypto.create_signature(ec, data)
-            self.assertEqual(len(signature), self.crypto.get_signature_length(ec))
-            self.assertTrue(self.crypto.is_valid_signature(ec, data, signature))
+        for security_level in DEFAULT_SECURITY_LEVELS.keys():
+            key = DispersyPrivateKey(security_level=security_level)
+            signature = key.sign(self.data)
 
-            self.assertFalse(self.crypto.is_valid_signature(ec, data, "-" * self.crypto.get_signature_length(ec)))
-            self.assertFalse(self.crypto.is_valid_signature(ec, "---", signature))
+            self.assertTrue(key.verify(signature, self.data))
 
-            for i in xrange(len(signature)):
-                # invert one bit in the ith character of the signature
-                invalid_signature = list(signature)
-                invalid_signature[i] = chr(ord(invalid_signature[i]) ^ 1)
-                invalid_signature = "".join(invalid_signature)
-                self.assertNotEqual(signature, invalid_signature)
-                self.assertFalse(self.crypto.is_valid_signature(ec, data, invalid_signature))
+    def test_serialise_private(self):
+        """
+        Create, serialise and deserialize a key for each curve.
+        """
+        for security_level in DEFAULT_SECURITY_LEVELS.keys():
+            key = DispersyPrivateKey(security_level=security_level)
+            binary = key.private_bytes()
+            key2 = DispersyPrivateKey.from_bytes(binary)
 
-    def test_serialise_binary(self):
+            self.assertEqual(key2.hash(), key.hash())
+
+    def test_serialise_public(self):
         """
         Creates and serialises each curve.
         """
-        data = "".join(chr(i % 256) for i in xrange(1024))
-        for curve in self.crypto.security_levels:
-            ec = self.crypto.generate_key(curve)
-            ec_pub = ec.pub()
+        for security_level in DEFAULT_SECURITY_LEVELS.keys():
+            key = DispersyPrivateKey(security_level=security_level)
+            public_key = key.public_key
+            signature = key.sign(self.data)
 
-            signature = self.crypto.create_signature(ec, data)
-            self.assertEqual(len(signature), self.crypto.get_signature_length(ec))
-            self.assertTrue(self.crypto.is_valid_signature(ec, data, signature))
+            binary = public_key.public_bytes()
+            key2 = DispersyPublicKey.from_bytes(binary)
 
-            public = self.crypto.key_to_bin(ec_pub)
-            self.assertTrue(self.crypto.is_valid_public_bin(public), public)
-            self.assertEqual(public, self.crypto.key_to_bin(ec_pub))
+            self.assertTrue(key2.verify(signature, self.data))
 
-            private = self.crypto.key_to_bin(ec)
-            self.assertTrue(self.crypto.is_valid_private_bin(private), private)
-            self.assertEqual(private, self.crypto.key_to_bin(ec))
+    def test_sign_not_valid(self):
+        """
+        A signature created with another key shouldn't be valid.
+        """
+        for security_level in DEFAULT_SECURITY_LEVELS.keys():
+            key1 = DispersyPrivateKey(security_level=security_level)
+            key2 = DispersyPrivateKey(security_level=security_level)
+            signature1 = key1.sign(self.data)
+            signature2 = key2.sign(self.data)
 
-            ec_clone = self.crypto.key_from_public_bin(public)
-            self.assertTrue(self.crypto.is_valid_signature(ec_clone, data, signature))
-            ec_clone = self.crypto.key_from_private_bin(private)
-            self.assertTrue(self.crypto.is_valid_signature(ec_clone, data, signature))
+            self.assertFalse(key1.verify(signature2, self.data))
+            self.assertFalse(key2.verify(signature1, self.data))
 
-    def test_performance(self):
-        from time import time
-        import sys
-        import os
+    def test_sign_verify_with_public(self):
+        """
+        Signature verification should be possible with a public key only.
+        """
+        for security_level in DEFAULT_SECURITY_LEVELS.keys():
+            key = DispersyPrivateKey(security_level=security_level)
+            public_key = key.public_key
+            signature = key.sign(self.data)
 
-        ec = self.crypto.generate_key(u"very-low")
+            self.assertTrue(public_key.verify(signature, self.data))
 
-        data = [os.urandom(1024) for i in xrange(1000)]
-        for curve in [u"very-low", u"low", u"medium", u"high", u"curve25519"]:
-            t1 = time()
-            ec = self.crypto.generate_key(curve)
-            t2 = time()
-            signatures = [self.crypto.create_signature(ec, msg) for msg in data]
-            t3 = time()
-            verfified = [self.crypto.is_valid_signature(ec, msg, signature) for msg, signature in zip(data, signatures)]
-            # print >> sys.stderr, curve, "verify", time() - t3, "sign", t3 - t2, "genkey", t2 - t1
+    def test_sign_verify_with_other_public(self):
+        """
+        Signature verification with another public key should fail.
+        """
+        for security_level in DEFAULT_SECURITY_LEVELS.keys():
+            key1 = DispersyPrivateKey(security_level=security_level)
+            key2 = DispersyPrivateKey(security_level=security_level)
+            public_key1 = key1.public_key
+            public_key2 = key2.public_key
+            signature1 = key1.sign(self.data)
+            signature2 = key2.sign(self.data)
 
-            assert all(verfified)
+            self.assertFalse(public_key1.verify(signature2, self.data))
+            self.assertFalse(public_key2.verify(signature1, self.data))

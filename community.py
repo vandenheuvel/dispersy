@@ -20,6 +20,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall, deferLater
 from twisted.python.threadable import isInIOThread
 
+from crypto import DispersyPublicKey, DispersyCrypto
 from .authentication import NoAuthentication, MemberAuthentication, DoubleMemberAuthentication
 from .bloomfilter import BloomFilter
 from .candidate import Candidate, WalkCandidate
@@ -481,13 +482,14 @@ class Community(TaskManager):
         self._logger.debug("using dummy master member")
 
         try:
-            public_key, = self._dispersy.database.execute(u"SELECT public_key FROM member WHERE id = ?", (self._master_member.database_id,)).next()
+            public_key_binary, = self._dispersy.database.execute(u"SELECT public_key FROM member WHERE id = ?", (self._master_member.database_id,)).next()
+            public_key = DispersyPublicKey.from_bytes(public_key_binary)
         except StopIteration:
             pass
         else:
             if public_key:
                 self._logger.debug("%s found master member", self._cid.encode("HEX"))
-                self._master_member = self._dispersy.get_member(public_key=str(public_key))
+                self._master_member = self._dispersy.get_member(public_key=public_key)
                 assert self._master_member.public_key
                 self.cancel_pending_task("download master member identity")
             else:
@@ -1842,8 +1844,11 @@ class Community(TaskManager):
         assert isinstance(public_key, str)
         assert isinstance(private_key, str)
         assert not mid or len(mid) == 20
-        assert not public_key or self._dispersy.crypto.is_valid_public_bin(public_key)
-        assert not private_key or self._dispersy.crypto.is_valid_private_bin(private_key)
+        assert not public_key or DispersyCrypto.is_valid_public_key(public_key)
+        assert not private_key or DispersyCrypto.is_valid_private_key(private_key)
+
+        public_key = DispersyPublicKey.from_bytes(public_key) if public_key else None
+        private_key = DispersyPublicKey.from_bytes(private_key) if private_key else None
 
         member = self._dispersy.get_member(mid=mid, public_key=public_key, private_key=private_key)
         # We only need to check if this member has an identity message in this community if we still don't have the full

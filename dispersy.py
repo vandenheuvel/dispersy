@@ -53,10 +53,10 @@ from twisted.internet.task import LoopingCall
 from twisted.python.failure import Failure
 from twisted.python.threadable import isInIOThread
 
+from crypto import DispersyPrivateKey, DispersyCrypto, DispersyPublicKey
 from .authentication import MemberAuthentication, DoubleMemberAuthentication
 from .candidate import LoopbackCandidate, WalkCandidate, Candidate
 from .community import Community
-from .crypto import DispersyCrypto, ECCrypto
 from .destination import CommunityDestination, CandidateDestination
 from .discovery.community import DiscoveryCommunity
 from .dispersydatabase import DispersyDatabase
@@ -85,7 +85,7 @@ class Dispersy(TaskManager):
     outgoing data for, possibly, multiple communities.
     """
 
-    def __init__(self, endpoint, working_directory, database_filename=u"dispersy.db", crypto=ECCrypto()):
+    def __init__(self, endpoint, working_directory, database_filename=u"dispersy.db"):
         """
         Initialise a Dispersy instance.
 
@@ -101,7 +101,6 @@ class Dispersy(TaskManager):
         assert isinstance(endpoint, Endpoint), type(endpoint)
         assert isinstance(working_directory, unicode), type(working_directory)
         assert isinstance(database_filename, unicode), type(database_filename)
-        assert isinstance(crypto, DispersyCrypto), type(crypto)
         super(Dispersy, self).__init__()
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -124,8 +123,6 @@ class Dispersy(TaskManager):
                 os.makedirs(database_directory)
             database_filename = os.path.join(database_directory, database_filename)
         self._database = DispersyDatabase(database_filename)
-
-        self._crypto = crypto
 
         # indicates what our connection type is.  currently it can be u"unknown", u"public", or
         # u"symmetric-NAT"
@@ -359,14 +356,6 @@ class Dispersy(TaskManager):
         return self._database
 
     @property
-    def crypto(self):
-        """
-        The Dispersy crypto singleton.
-        @rtype: DispersyCrypto
-        """
-        return self._crypto
-
-    @property
     def statistics(self):
         """
         The Statistics instance.
@@ -445,15 +434,13 @@ class Dispersy(TaskManager):
     def get_progress_handlers(self):
         return self._progress_handlers
 
-    def get_member(self, mid="", public_key="", private_key=""):
+    def get_member(self, mid="", public_key=None, private_key=None):
         """Returns a Member instance associated with public_key.
 
         Since we have the public_key, we can create this user if it doesn't yet.  Hence, this method always succeeds.
 
         @param public_key: The public key of the member we want to obtain.
         @param private_key: The public/private key pair of the member we want to obtain.
-        @type public_key: string
-        @type private_key: string
 
         @return: The Member instance associated with public_key.
         @rtype: Member
@@ -461,81 +448,76 @@ class Dispersy(TaskManager):
         assert sum(map(bool, (mid, public_key, private_key))) == 1, \
             "Only one of the three optional arguments may be passed: %s" % str((mid, public_key, private_key))
         assert isinstance(mid, str)
-        assert isinstance(public_key, str)
-        assert isinstance(private_key, str)
         assert not mid or len(mid) == 20, (mid.encode("HEX"), len(mid))
-        assert not public_key or self.crypto.is_valid_public_bin(public_key)
-        assert not private_key or self.crypto.is_valid_private_bin(private_key)
 
         if not mid:
             if public_key:
-                mid = sha1(public_key).digest()
+                mid = public_key.hash()
 
             elif private_key:
-                _key = self.crypto.key_from_private_bin(private_key)
-                mid = self.crypto.key_to_hash(_key.pub())
+                mid = private_key.hash()
 
         member = self._member_cache_by_hash.get(mid)
         if member:
             return member
 
         if private_key:
-            key = self.crypto.key_from_private_bin(private_key)
-            public_key = self.crypto.key_to_bin(key.pub())
+            public_key = private_key.public_key
 
-        elif public_key:
-            key = self.crypto.key_from_public_bin(public_key)
-
-        # both public and private keys are valid at this point
+        # both public and private keys are valid from this point
 
         # The member is not cached, let's try to get it from the database
         row = self.database.execute(u"SELECT id, public_key, private_key FROM member WHERE mid = ? LIMIT 1", (buffer(mid),)).fetchone()
 
+        private_key_bytes = private_key.private_bytes()
+        public_key_bytes = public_key.public_bytes()
+
         if row:
             database_id, public_key_from_db, private_key_from_db = row
 
-            public_key_from_db = "" if public_key_from_db is None else str(public_key_from_db)
-            private_key_from_db = "" if private_key_from_db is None else str(private_key_from_db)
 
             # the private key that was passed as an argument overrules everything, update db if neccesary
             if private_key:
                 assert public_key
-                if private_key_from_db != private_key:
+                if private_key_from_db != private_key_bytes:
                     self.database.execute(u"UPDATE member SET public_key = ?, private_key = ? WHERE id = ?",
-                        (buffer(public_key), buffer(private_key), database_id))
+                                          (buffer(public_key_bytes), buffer(private_key_bytes), database_id))
             else:
                 # the private key from the database overrules the public key argument
                 if private_key_from_db:
-                    key = self.crypto.key_from_private_bin(private_key_from_db)
+                    key = DispersyPrivateKey.from_bytes(private_key_from_db)
 
                 # the public key argument overrules anything in the database
                 elif public_key:
-                    if public_key_from_db != public_key:
+                    if public_key_from_db != public_key_bytes:
                         self.database.execute(u"UPDATE member SET public_key = ? WHERE id = ?",
-                            (buffer(public_key), database_id))
+                                              (buffer(public_key_bytes), database_id))
 
                 # no priv/pubkey arguments passed, maybe use the public key from the database
                 elif public_key_from_db:
-                    key = self.crypto.key_from_public_bin(public_key_from_db)
+                    key = DispersyPublicKey.from_bytes(public_key_from_db)
 
                 else:
                     return DummyMember(self, database_id, mid)
 
         # the member is not in the database, insert it
         elif public_key or private_key:
+
             if private_key:
                 assert public_key
+
             # The MID or public/private keys are not in the database, store them.
             database_id = self.database.execute(
                 u"INSERT INTO member (mid, public_key, private_key) VALUES (?, ?, ?)",
-                (buffer(mid), buffer(public_key), buffer(private_key)), get_lastrowid=True)
+                (buffer(mid), buffer(public_key_bytes), buffer(private_key_bytes)), get_lastrowid=True)
         else:
             # We could't find the key on the DB, nothing else to do
             database_id = self.database.execute(u"INSERT INTO member (mid) VALUES (?)",
-                (buffer(mid),), get_lastrowid=True)
+                                                (buffer(mid),), get_lastrowid=True)
             return DummyMember(self, database_id, mid)
 
-        member = Member(self, key, database_id, mid)
+        key = private_key or public_key
+        member = Member(self, key, database_id)
 
         # store in cache
         self._member_cache_by_hash[member.mid] = member
@@ -546,13 +528,12 @@ class Dispersy(TaskManager):
 
         return member
 
-    def get_new_member(self, securitylevel=u"medium"):
+    def get_new_member(self, security_level=u"medium"):
         """
         Returns a Member instance created from a newly generated public key.
         """
-        assert isinstance(securitylevel, unicode), type(securitylevel)
-        key = self.crypto.generate_key(securitylevel)
-        return self.get_member(private_key=self.crypto.key_to_bin(key))
+        key = DispersyPrivateKey(security_level=security_level)
+        return self.get_member(private_key=key)
 
     def get_member_from_database_id(self, database_id):
         """

@@ -6,6 +6,7 @@ import logging
 
 from M2Crypto.EC import ECError
 
+from crypto import DispersyCrypto
 from .authentication import Authentication, NoAuthentication, MemberAuthentication, DoubleMemberAuthentication
 from .bloomfilter import BloomFilter
 from .candidate import Candidate
@@ -54,6 +55,7 @@ class Conversion(object):
         # the messages that this instance can handle, and that this instance produces, is identified
         # by _prefix.
         self._prefix = dispersy_version + community_version + community.cid
+        # 22 == hashlength + 2
         assert len(self._prefix) == 22  # when this assumption changes, we need to ensure the
                                         # dispersy_version and community_version properties are
                                         # returned correctly
@@ -84,9 +86,10 @@ class Conversion(object):
         """
         # at least a length of 23, as we need the prefix + 1 byte messagetype
         assert isinstance(data, str), type(data)
-        assert len(data) >= 23
+        prefix_length = 22
+        assert len(data) > prefix_length
 
-        return (len(data) >= 23 and data[:22] == self._prefix)
+        return len(data) > prefix_length and data[:prefix_length] == self._prefix
 
     @abstractmethod
     def decode_meta_message(self, data):
@@ -906,7 +909,7 @@ class NoDefBinaryConversion(Conversion):
             container.append(message.authentication.member.mid)
         elif encoding == "bin":
             assert message.authentication.member.public_key
-            assert self._community.dispersy.crypto.is_valid_public_bin(message.authentication.member.public_key), message.authentication.member.public_key.encode("HEX")
+            assert DispersyCrypto.is_valid_public_key(message.authentication.member.public_key), message.authentication.member.public_key.encode("HEX")
             container.extend((self._struct_H.pack(len(message.authentication.member.public_key)), message.authentication.member.public_key))
         else:
             raise NotImplementedError(encoding)
@@ -1164,10 +1167,11 @@ class NoDefBinaryConversion(Conversion):
         """
         Returns True when DATA can be decoded using this conversion.
         """
+        prefix_length = 22
         assert isinstance(data, str), type(data)
-        return (len(data) >= 23 and
-                data[:22] == self._prefix and
-                data[22] in self._decode_message_map)
+        return (len(data) > prefix_length and
+                data[:prefix_length] == self._prefix and
+                data[prefix_length] in self._decode_message_map)
 
     def decode_meta_message(self, data):
         """

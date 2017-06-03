@@ -157,7 +157,7 @@ class MemberAuthentication(Authentication):
             return self._member.verify(payload, self._signature)
 
         def _is_sig_empty(self):
-            return self._signature == "" or self._signature == "\x00" * self._member.signature_length
+            return not self._signature or self._signature == "\x00" * self._member.signature_length
 
 
     def __init__(self, encoding="default"):

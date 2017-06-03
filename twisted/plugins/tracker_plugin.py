@@ -40,7 +40,6 @@ DISPERSY_ROOT_PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dir
 sys.path.insert(0, DISPERSY_ROOT_PATH)
 
 from dispersy.candidate import LoopbackCandidate
-from dispersy.crypto import NoVerifyCrypto, NoCrypto
 from dispersy.discovery.community import DiscoveryCommunity
 from dispersy.dispersy import Dispersy
 from dispersy.endpoint import StandaloneEndpoint
@@ -64,8 +63,8 @@ clean_twisted_observers()
 
 class TrackerDispersy(Dispersy):
 
-    def __init__(self, endpoint, working_directory, silent=False, crypto=NoVerifyCrypto()):
-        super(TrackerDispersy, self).__init__(endpoint, working_directory, u":memory:", crypto)
+    def __init__(self, endpoint, working_directory, silent=False):
+        super(TrackerDispersy, self).__init__(endpoint, working_directory, u":memory:")
 
         # location of persistent storage
         self._persistent_storage_filename = os.path.join(working_directory, "persistent-storage.data")
@@ -201,12 +200,6 @@ class TrackerServiceMaker(object):
         tracker_service = TrackerMultiService(options["logfile"], options["statedir"])
         tracker_service.setName("Dispersy Tracker")
 
-        # crypto
-        if options["crypto"] == 'NoCrypto':
-            crypto = NoCrypto()
-        else:
-            crypto = NoVerifyCrypto()
-
         container = [None]
         manhole_namespace = {}
         if options["manhole"]:
@@ -225,8 +218,7 @@ class TrackerServiceMaker(object):
             dispersy = TrackerDispersy(StandaloneEndpoint(options["port"],
                                                           options["ip"]),
                                        unicode(options["statedir"]),
-                                       bool(options["silent"]),
-                                       crypto)
+                                       bool(options["silent"]))
             container[0] = dispersy
             manhole_namespace['dispersy'] = dispersy
 
