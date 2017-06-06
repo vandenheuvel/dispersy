@@ -1,6 +1,8 @@
 """
 All cryptography for Dispersy.
 """
+from math import ceil
+
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.ec import SECT233K1, SECT409K1, SECT571R1, generate_private_key, ECDSA
@@ -119,19 +121,11 @@ class DispersyKey(object):
         These seem somehow longer than expected. For example: 233 bits -> 60 bytes, but actually is 64 bytes.
         :return:
         """
-        temporary_key = generate_private_key(self.curve, default_backend())
-        signature = temporary_key.sign(b"", ECDSA(SHA1()))
-        return len(signature)
-
-    def public_bytes(self, encoding="PEM", encoding_format="SubjectPublicKeyInfo"):
-        """
-        Get this public key in byte form.
-
-        :param encoding: either "PEM" or "DER"
-        :param encoding_format: either "X.509 subjectPublicKeyInfo with PKCS#1", "Raw PKCS#1" or "OpenSSH"
-        :return: a byte string
-        """
-        return self.key.public_bytes(Encoding[encoding], PublicFormat[encoding_format])
+        # temporary_key = generate_private_key(self.curve, default_backend())
+        # signature = temporary_key.sign(b"AFDF", ECDSA(SHA1()))
+        # length = len(signature)
+        length = int(ceil(self.key_size / 8.0) * 2)
+        return length
 
     @staticmethod
     def verify(key, signature, data, hash_algorithm="SHA1"):

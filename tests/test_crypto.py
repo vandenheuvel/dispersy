@@ -81,3 +81,15 @@ class TestDispersyKey(TestCase):
 
             self.assertFalse(public_key1.verify(signature2, self.data))
             self.assertFalse(public_key2.verify(signature1, self.data))
+
+    def test_hash(self):
+        """
+        Test taking a hash.
+        """
+        key = DispersyPrivateKey()
+        h = key.hash()
+        self.assertEqual(len(h), 20)
+
+        public_key = key.public_key
+        h = key.hash()
+        self.assertEqual(len(h), 20)

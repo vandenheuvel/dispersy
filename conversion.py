@@ -6,7 +6,7 @@ import logging
 
 from M2Crypto.EC import ECError
 
-from crypto import DispersyCrypto
+from crypto import DispersyCrypto, DispersyPublicKey
 from .authentication import Authentication, NoAuthentication, MemberAuthentication, DoubleMemberAuthentication
 from .bloomfilter import BloomFilter
 from .candidate import Candidate
@@ -472,7 +472,7 @@ class NoDefBinaryConversion(Conversion):
 
             key = data[offset:offset + key_length]
             try:
-                member = self._community.dispersy.get_member(public_key=key)
+                member = self._community.dispersy.get_member(public_key=DispersyPublicKey.from_bytes(key))
             except:
                 raise DropPacket("Invalid cryptographic key (_decode_authorize)")
             offset += key_length
@@ -1108,8 +1108,8 @@ class NoDefBinaryConversion(Conversion):
 
             if member:
                 placeholder.offset = offset
-                placeholder.first_signature_offset = len(data) - member.signature_length
-                placeholder.authentication = MemberAuthentication.Implementation(authentication, member, data[-member.signature_length:])
+                placeholder.first_signature_offset = offset + 8
+                placeholder.authentication = MemberAuthentication.Implementation(authentication, member, data[placeholder.first_signature_offset:])
             else:
                 raise DropPacket("Invalid cryptographic key (_decode_member_authentication)")
         else:
