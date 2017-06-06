@@ -91,5 +91,5 @@ class TestDispersyKey(TestCase):
         self.assertEqual(len(h), 20)
 
         public_key = key.public_key
-        h = key.hash()
+        h = public_key.hash()
         self.assertEqual(len(h), 20)
