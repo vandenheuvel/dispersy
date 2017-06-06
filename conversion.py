@@ -1083,10 +1083,15 @@ class NoDefBinaryConversion(Conversion):
             except ECError:
                 raise DropPacket("Invalid member authentication")
 
+            pk_offset = offset + 12 + 2
+            key_length, = self._struct_H.unpack_from(data, offset + 12)
+            nr_messages_offset = pk_offset + key_length
+            nr_messages, = self._struct_B.unpack_from(data, nr_messages_offset)
+
             # If signatures and verification are enabled, verify that the signature matches the member sha1 identifier
             if member:
                 placeholder.offset = offset
-                placeholder.first_signature_offset = len(data) - member.signature_length
+                placeholder.first_signature_offset = nr_messages_offset + 1 + nr_messages * 2
                 placeholder.authentication = MemberAuthentication.Implementation(authentication, member, data[-member.signature_length:])
             else:
                 raise DelayPacketByMissingMember(self._community, member_id)
