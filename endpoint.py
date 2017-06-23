@@ -350,7 +350,7 @@ class StandaloneEndpoint(Endpoint):
                 self._dispersy.statistics.cur_sendqueue = len(self._sendqueue)
 
 
-class ManualEnpoint(StandaloneEndpoint):
+class ManualEndpoint(StandaloneEndpoint):
 
     def __init__(self, *args, **kwargs):
         StandaloneEndpoint.__init__(self, *args, **kwargs)

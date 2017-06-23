@@ -10,7 +10,7 @@ from twisted.logger import formatEvent, globalLogPublisher, LogLevel
 
 from ..discovery.community import PEERCACHE_FILENAME
 from ..dispersy import Dispersy
-from ..endpoint import ManualEnpoint
+from ..endpoint import ManualEndpoint
 from ..util import blocking_call_on_reactor_thread
 from .debugcommunity.community import DebugCommunity
 from .debugcommunity.node import DebugNode
@@ -123,7 +123,7 @@ class DispersyTestFunc(TestCase):
             memory_database_argument = {'database_filename': u":memory:"} if memory_database else {}
             working_directory = unicode(mkdtemp(suffix="_dispersy_test_session"))
 
-            dispersy = Dispersy(ManualEnpoint(0), working_directory, **memory_database_argument)
+            dispersy = Dispersy(ManualEndpoint(0), working_directory, **memory_database_argument)
             dispersy.start(autoload_discovery=autoload_discovery)
 
             self.dispersy_objects.append(dispersy)
